@@ -21,6 +21,7 @@
     .meta{display:flex;gap:12px;align-items:center;margin-top:12px}
     .badge{padding:6px 10px;border-radius:8px;background:rgba(125,211,252,0.06);color:var(--accent);font-weight:700}
     footer{margin-top:22px;padding:18px;text-align:center;color:var(--muted);font-size:14px}
+    @media (max-width:820px){.hero{flex-direction:column-reverse}}
   </style>
 </head>
 <body>
@@ -29,13 +30,14 @@
       <div class="card hero">
         <div style="flex:1;min-width:260px">
           <h1>Collect & Avoid — Play Online</h1>
-          <p class="lead">A tiny, single-file 2D HTML5 canvas game. Collect golden orbs, avoid enemies, and survive. This page hosts the game in the cloud and links to the source repository for developers.</p>
+          <p class="lead">A tiny, single-file 2D HTML5 canvas game. Collect golden orbs, avoid enemies, and survive. This page hosts the game and links to the source repository for developers.</p>
 
           <div class="actions">
-            <!-- Play button opens your GitHub Pages site (change URL if you host the game elsewhere) -->
-            <a class="btn btn-play" id="openGame" href="https://paurush-nimje.github.io/Game-Portal/" target="_blank" rel="noopener">Open Game</a>
-            <!-- GitHub repo button -->
-            <a class="btn btn-git" id="openRepo" href="https://github.com/Paurush-Nimje/Game-Portal" target="_blank" rel="noopener">View on GitHub</a>
+            <!-- Open the game (relative path to the game folder) -->
+            <a class="btn btn-play" id="openGame" href="./game/index.html" target="_blank" rel="noopener">Open Game</a>
+
+            <!-- GitHub repo button (opens repo in new tab) -->
+            <button class="btn btn-git" id="openRepo" onclick="window.open('https://github.com/Paurush-Nimje/Game-Portal','_blank')" style="background:transparent;border:1px solid rgba(125,211,252,0.14);color:var(--accent)">Open Repository</button>
           </div>
 
           <div class="meta">
@@ -44,18 +46,16 @@
           </div>
         </div>
 
-        <!-- game preview removed per your request -->
+        <!-- preview / iframe removed per request; only button remains -->
       </div>
 
       <div style="margin-top:16px" class="card">
         <h2 style="margin:0 0 6px">About this website</h2>
-        <p style="margin:0;color:var(--muted)">This site is a lightweight landing page that hosts the game and provides a convenient link to the project's GitHub repository. It's designed to be hosted on any static site hosting service.</p>
+        <p style="margin:0;color:var(--muted)">This is a small landing page that links to the game and the project repository. To run the game from this site, place the game file at <code>/game/index.html</code> inside the repository (exact path and filename required).</p>
       </div>
 
       <footer class="card" style="margin-top:12px">
-        <div>Author: <strong>Paurush Nimje</strong> — Repository:
-          <button onclick="window.open('https://github.com/Paurush-Nimje/Game-Portal','_blank')" style="padding:6px 12px;border-radius:6px;border:0;background:#7dd3fc;color:#012;font-weight:700;cursor:pointer">Open Repository</button>
-        </div>
+        <div>Author: <strong>Paurush Nimje</strong></div>
       </footer>
     </div>
   </header>
