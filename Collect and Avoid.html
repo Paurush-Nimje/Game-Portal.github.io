@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Collect & Avoid — 2D Canvas Game</title>
+  <style>
+    :root{--bg:#0f1724;--panel:#0b1220;--accent:#ffd166;--danger:#ff6b6b;--muted:#94a3b8}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#08101a);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
+    .card{width:960px;max-width:100%;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:16px;box-shadow:0 8px 30px rgba(2,6,23,0.6);display:grid;grid-template-columns:1fr 260px;gap:12px}
+    canvas{width:100%;height:600px;display:block;border-radius:8px;background:linear-gradient(180deg,#09202a,#021018);box-shadow:inset 0 2px 8px rgba(0,0,0,0.6)}
+    .panel{padding:12px;background:rgba(255,255,255,0.02);border-radius:8px;color:#dbe7f5}
+    h1{margin:0 0 6px 0;font-size:18px}
+    p{margin:6px 0;color:var(--muted);font-size:13px}
+    .stats{display:flex;gap:8px;flex-wrap:wrap}
+    .stat{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;min-width:88px;text-align:center}
+    button{appearance:none;border:0;padding:8px 10px;border-radius:8px;cursor:pointer;background:var(--accent);color:#063; font-weight:700}
+    .controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+    small{color:var(--muted)}
+    footer{grid-column:1/-1;text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
+    @media (max-width:880px){.card{grid-template-columns:1fr}canvas{height:420px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div>
+        <canvas id="game" width="800" height="600"></canvas>
+        <footer>Controls: <strong>WASD / Arrow keys</strong> — Pause: <strong>Space</strong> — Restart: <strong>R</strong></footer>
+      </div>
+      <aside class="panel">
+        <h1>Collect & Avoid</h1>
+        <p>Move the player to collect golden orbs. Avoid red enemies — collision costs you a life. Survive and collect as many orbs as you can. Difficulty increases over time.</p>
+        <div class="stats">
+          <div class="stat"><div>Score</div><div id="score">0</div></div>
+          <div class="stat"><div>Level</div><div id="level">1</div></div>
+          <div class="stat"><div>Lives</div><div id="lives">3</div></div>
+        </div>
+
+        <div style="margin-top:10px">
+          <button id="startBtn">Start / Resume</button>
+          <button id="pauseBtn" style="margin-left:8px">Pause</button>
+        </div>
+
+        <div class="controls">
+          <div>
+            <p><strong>Game rules</strong></p>
+            <ul style="padding-left:18px;margin:6px 0;color:var(--muted)">
+              <li>Collect orbs +10 pts.</li>
+              <li>Hit enemy: -1 life and short invulnerability.</li>
+              <li>Every 10 orbs increases level (enemies speed up).</li>
+            </ul>
+          </div>
+          <div>
+            <p><strong>Options</strong></p>
+            <label style="display:block;margin-bottom:6px"><small>Enemy count</small>
+              <input id="enemyCount" type="range" min="1" max="8" value="3" style="width:100%"></label>
+            <label style="display:block;"><small>Orb spawn rate (ms)</small>
+              <input id="orbRate" type="range" min="400" max="2500" value="900" style="width:100%"></label>
+          </div>
+        </div>
+        <p style="margin-top:8px"><small>Tip: use corners strategically to kite enemies. Want more features? Ask me to add: multiple levels, power-ups, animations, or sound effects.</small></p>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+  // ---- Simple 2D Canvas Game: Collect Orbs, Avoid Enemies ----
+  (function(){
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+
+    // UI elements
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const levelEl = document.getElementById('level');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const enemyCountInput = document.getElementById('enemyCount');
+    const orbRateInput = document.getElementById('orbRate');
+
+    // Game state
+    let keys = {};
+    let score = 0;
+    let level = 1;
+    let lives = 3;
+    let running = false;
+    let paused = false;
+    let lastTime = 0;
+    let orbTimer = 0;
+    let orbInterval = Number(orbRateInput.value);
+
+    // Player
+    const player = {
+      x: W/2, y: H/2, r: 16, speed: 220, color: '#9be7ff', invuln:0
+    };
+
+    // Collections
+    let orbs = [];
+    let enemies = [];
+
+    // Utilities
+    function rand(min,max){return Math.random()*(max-min)+min}
+    function dist(a,b){const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy)}
+
+    // Spawn functions
+    function spawnOrb(){
+      const margin = 24;
+      orbs.push({x:rand(margin,W-margin), y:rand(margin,H-margin), r:9, born:performance.now()});
+    }
+
+    function spawnEnemies(n){
+      enemies = [];
+      for(let i=0;i<n;i++){
+        // spawn at edges
+        const side = Math.floor(rand(0,4));
+        let x, y;
+        if(side===0){ x = -20; y = rand(0,H) }
+        else if(side===1){ x = W+20; y = rand(0,H) }
+        else if(side===2){ x = rand(0,W); y = -20 }
+        else { x = rand(0,W); y = H+20 }
+        enemies.push({x,y,r:18, speed:60 + rand(0,40), dir:0});
+      }
+    }
+
+    // Reset
+    function reset(){
+      score = 0; level = 1; lives = 3; orbs = []; enemies = [];
+      player.x = W/2; player.y = H/2; player.invuln = 0; player.speed = 220;
+      spawnEnemies(Number(enemyCountInput.value));
+      orbInterval = Number(orbRateInput.value);
+      orbTimer = 0;
+      updateUI();
+    }
+
+    // Input
+    window.addEventListener('keydown', e=>{ keys[e.key.toLowerCase()] = true; if(e.code==='Space'){ paused = !paused; } if(e.key.toLowerCase()==='r'){ reset(); }});
+    window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+
+    // UI hooks
+    startBtn.addEventListener('click', ()=>{ running = true; paused = false; });
+    pauseBtn.addEventListener('click', ()=>{ paused = !paused; });
+    enemyCountInput.addEventListener('input', ()=> spawnEnemies(Number(enemyCountInput.value)));
+    orbRateInput.addEventListener('input', ()=> orbInterval = Number(orbRateInput.value));
+
+    function updateUI(){ scoreEl.textContent = Math.floor(score); livesEl.textContent = lives; levelEl.textContent = level; }
+
+    // Game loop
+    function update(dt){
+      if(paused || !running) return;
+
+      // player movement
+      let vx=0, vy=0;
+      if(keys['w']||keys['arrowup']) vy -= 1;
+      if(keys['s']||keys['arrowdown']) vy += 1;
+      if(keys['a']||keys['arrowleft']) vx -= 1;
+      if(keys['d']||keys['arrowright']) vx += 1;
+      const len = Math.hypot(vx,vy);
+      if(len>0){ vx = vx/len * player.speed * dt; vy = vy/len * player.speed * dt; player.x += vx; player.y += vy; }
+
+      // clamp
+      player.x = Math.max(player.r, Math.min(W-player.r, player.x));
+      player.y = Math.max(player.r, Math.min(H-player.r, player.y));
+
+      // orb spawning
+      orbTimer += dt*1000;
+      if(orbTimer > orbInterval){ spawnOrb(); orbTimer = 0; }
+
+      // enemies chase player
+      enemies.forEach(e=>{
+        const angle = Math.atan2(player.y - e.y, player.x - e.x);
+        e.x += Math.cos(angle) * (e.speed + (level-1)*10) * dt;
+        e.y += Math.sin(angle) * (e.speed + (level-1)*10) * dt;
+      });
+
+      // collisions - player & orbs
+      for(let i=orbs.length-1;i>=0;i--){
+        if(dist(player, orbs[i]) < player.r + orbs[i].r){
+          orbs.splice(i,1);
+          score += 10;
+          if(score % 100 === 0){ levelUp(); }
+          updateUI();
+        }
+      }
+
+      // collisions - player & enemies
+      if(player.invuln <= 0){
+        for(let i=0;i<enemies.length;i++){
+          if(dist(player,enemies[i]) < player.r + enemies[i].r){
+            lives -= 1; player.invuln = 1.6; // seconds
+            // push player a bit
+            const ang = Math.atan2(player.y-enemies[i].y, player.x-enemies[i].x);
+            player.x += Math.cos(ang)*30; player.y += Math.sin(ang)*30;
+            updateUI();
+            break;
+          }
+        }
+      }
+
+      if(player.invuln > 0) player.invuln -= dt;
+
+      // lose condition
+      if(lives <= 0){ running = false; paused = true; }
+    }
+
+    function levelUp(){ level += 1; player.speed += 8; // slightly faster
+      // add an enemy occasionally to increase difficulty
+      if(enemies.length < 10 && Math.random() < 0.6){ enemies.push({x:rand(-20,W+20), y:rand(-20,H+20), r:18, speed:70 + rand(0,60) }); }
+      updateUI();
+    }
+
+    function draw(){
+      // background
+      ctx.clearRect(0,0,W,H);
+      // decorative gradient
+      const g = ctx.createLinearGradient(0,0,0,H);
+      g.addColorStop(0,'rgba(255,255,255,0.02)'); g.addColorStop(1,'rgba(0,0,0,0.05)');
+      ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+      // orbs
+      orbs.forEach(o=>{
+        ctx.beginPath(); ctx.arc(o.x,o.y,o.r,0,Math.PI*2); ctx.fillStyle = '#ffd166'; ctx.fill();
+        ctx.beginPath(); ctx.arc(o.x-3,o.y-3,3,0,Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fill();
+      });
+
+      // enemies
+      enemies.forEach(e=>{
+        ctx.save(); ctx.beginPath(); ctx.translate(e.x,e.y);
+        ctx.fillStyle = '#ff6b6b';
+        ctx.beginPath(); ctx.arc(0,0,e.r,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      });
+
+      // player (blink when invuln)
+      ctx.save();
+      if(player.invuln > 0 && Math.floor(player.invuln*6)%2===0) ctx.globalAlpha = 0.4;
+      ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,Math.PI*2); ctx.fillStyle = player.color; ctx.fill();
+      // eye
+      ctx.beginPath(); ctx.arc(player.x+6,player.y-4,3,0,Math.PI*2); ctx.fillStyle = '#012'; ctx.fill();
+      ctx.restore();
+
+      // HUD when paused/stopped
+      if(!running){
+        ctx.fillStyle = 'rgba(2,6,23,0.6)'; ctx.fillRect(0, H/2 - 40, W, 100);
+        ctx.fillStyle = '#dbe7f5'; ctx.font = '20px system-ui'; ctx.textAlign='center';
+        ctx.fillText(lives<=0 ? 'Game Over — Press R to restart' : 'Press Start to play', W/2, H/2);
+      }
+
+      // small scoreboard
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(10,10,170,44);
+      ctx.fillStyle = '#dbe7f5'; ctx.font = '14px system-ui'; ctx.textAlign='left';
+      ctx.fillText('Score: ' + Math.floor(score), 18, 30);
+      ctx.fillText('Level: ' + level + '  Lives: ' + lives, 18, 48);
+    }
+
+    function loop(ts){
+      if(!lastTime) lastTime = ts; const dt = Math.min(0.033, (ts-lastTime)/1000); lastTime = ts;
+      update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    // start the animation loop
+    requestAnimationFrame(loop);
+
+    // init
+    reset();
+
+  })();
+  </script>
+</body>
+</html>
